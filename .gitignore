@@ -19,6 +19,9 @@ data/
 models/
 results/
 
+.DS_Store
+Thumbs.db
+
 *.tmp
 *.bak
 *.swp
