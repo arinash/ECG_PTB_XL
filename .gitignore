@@ -15,9 +15,7 @@ logs/
 .vscode/
 .idea/
 
-data/raw/
-data/processed/
-
+data/
 models/
 results/
 
