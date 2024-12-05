@@ -5,6 +5,7 @@ import wfdb
 import ast
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.impute import SimpleImputer
+from scipy.signal import butter, filtfilt, medfilt
 
 
 def load_raw_data(df, sampling_rate, base_path):
@@ -81,6 +82,87 @@ def normalize_signals(signals):
     return signals_normalized.reshape(num_samples, num_leads, num_timesteps)
 
 
+def remove_baseline_drift(signal, sampling_rate=100, cutoff=0.5):
+    """
+    Removes baseline drift using a high-pass Butterworth filter.
+    
+    Parameters:
+        signal (np.ndarray): The ECG signal.
+        sampling_rate (int): Sampling rate of the ECG signal.
+        cutoff (float): Cutoff frequency for the high-pass filter.
+    
+    Returns:
+        np.ndarray: Signal with baseline drift removed.
+    """
+    nyquist = 0.5 * sampling_rate
+    normal_cutoff = cutoff / nyquist
+    b, a = butter(1, normal_cutoff, btype='high', analog=False)
+    return filtfilt(b, a, signal, axis=0)
+
+
+def remove_static_noise(signal, sampling_rate=100, cutoff=40):
+    """
+    Removes static noise using a low-pass Butterworth filter.
+    
+    Parameters:
+        signal (np.ndarray): The ECG signal.
+        sampling_rate (int): Sampling rate of the ECG signal.
+        cutoff (float): Cutoff frequency for the low-pass filter.
+    
+    Returns:
+        np.ndarray: Signal with high-frequency noise removed.
+    """
+    nyquist = 0.5 * sampling_rate
+    normal_cutoff = cutoff / nyquist
+    b, a = butter(4, normal_cutoff, btype='low', analog=False)
+    return filtfilt(b, a, signal, axis=0)
+
+
+def remove_burst_noise(signal, kernel_size=5):
+    """
+    Removes burst noise using median filtering.
+    
+    Parameters:
+        signal (np.ndarray): The ECG signal.
+        kernel_size (int): Kernel size for the median filter.
+    
+    Returns:
+        np.ndarray: Signal with spikes removed.
+    """
+    return medfilt(signal, kernel_size=(kernel_size, 1))
+
+
+def reduce_noise(signals, metadata, sampling_rate=100):
+    """
+    Preprocess ECG signals by reducing noise.
+
+    Parameters:
+        signals (np.ndarray): Raw ECG signals.
+        metadata (pd.DataFrame): Metadata containing noise information.
+        sampling_rate (int): Sampling rate of the ECG signal.
+
+    Returns:
+        np.ndarray: Preprocessed ECG signals.
+    """
+    preprocessed_signals = []
+    for i, signal in enumerate(signals):
+        # Baseline drift removal
+        if pd.notnull(metadata.iloc[i]['baseline_drift']):
+            signal = remove_baseline_drift(signal, sampling_rate)
+
+        # Static noise removal
+        if pd.notnull(metadata.iloc[i]['static_noise']):
+            signal = remove_static_noise(signal, sampling_rate)
+
+        # Burst noise removal
+        if pd.notnull(metadata.iloc[i]['burst_noise']):
+            signal = remove_burst_noise(signal)
+
+        preprocessed_signals.append(signal)
+    
+    return np.array(preprocessed_signals)
+
+
 def impute_missing_values(df, columns):
     """
     Impute missing values in specified columns using mean imputation.
@@ -127,6 +209,7 @@ if __name__ == "__main__":
 
     # Normalize signals
     X_normalized = normalize_signals(X)
+    X_preprocessed = reduce_noise(X, metadata_df)
 
     # Split data into train, validation, and test sets based on fold
     TRAIN_FOLDS = range(1, 9)  # Folds 1-8 for training
@@ -135,17 +218,17 @@ if __name__ == "__main__":
 
     # Training data
     train_mask = metadata_df['strat_fold'].isin(TRAIN_FOLDS)
-    X_train = X_normalized[train_mask]
+    X_train = X_preprocessed[train_mask]
     y_train = metadata_df[train_mask]['diagnostic_superclass']
 
     # Validation data
     validation_mask = metadata_df['strat_fold'] == VALIDATION_FOLD
-    X_val = X_normalized[validation_mask]
+    X_val = X_preprocessed[validation_mask]
     y_val = metadata_df[validation_mask]['diagnostic_superclass']
 
     # Testing data
     test_mask = metadata_df['strat_fold'] == TEST_FOLD
-    X_test = X_normalized[test_mask]
+    X_test = X_preprocessed[test_mask]
     y_test = metadata_df[test_mask]['diagnostic_superclass']
 
     # Save preprocessed data
