@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Easy ECG</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>ECG Analysis App</h1>
+        <form id="upload-form">
+            <label for="ecg_file">Upload an ECG file:</label>
+            <input type="file" id="ecg_file" name="ecg_file" accept=".dat, .hea" required>
+            <button type="submit">Analyze</button>
+        </form>
+        <div id="result">
+            <!-- Results -->
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('upload-form');
+        form.onsubmit = async (e) => {
+            e.preventDefault();
+            const fileInput = document.getElementById('ecg_file');
+            const formData = new FormData();
+            formData.append('ecg_file', fileInput.files[0]);
+
+            const response = await fetch('/upload', {
+                method: 'POST',
+                body: formData
+            });
+
+            const resultDiv = document.getElementById('result');
+            if (response.ok) {
+                const data = await response.json();
+                const tableRows = data.map(item => {
+                    const isBold = parseFloat(item.likelihood) > 75.0;
+                    return `
+                        <tr class="${isBold ? 'bold-row' : ''}">
+                            <td>${item.class}</td>
+                            <td>${item.likelihood}</td>
+                            <td>${item.recommendation}</td>
+                        </tr>
+                    `;
+                }).join('');
+
+                resultDiv.innerHTML = `
+                    <h2>Analysis Results</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Class</th>
+                                <th>Likelihood</th>
+                                <th>Recommendation</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${tableRows}
+                        </tbody>
+                    </table>
+                `;
+            } else {
+                const error = await response.json();
+                resultDiv.innerHTML = `<p style="color: red;">Error: ${error.error}</p>`;
+            }
+        };
+    </script>
+</body>
+</html>

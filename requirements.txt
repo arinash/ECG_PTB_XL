@@ -7,3 +7,8 @@ wfdb
 biosppy
 scikit-learn
 tensorflow
+torch
+fastai
+keras
+flask
+requests
