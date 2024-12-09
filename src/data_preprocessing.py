@@ -6,7 +6,8 @@ import ast
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.impute import SimpleImputer
 from scipy.signal import butter, filtfilt, medfilt
-
+from sklearn.preprocessing import LabelEncoder
+import joblib
 
 def load_raw_data(df, sampling_rate, base_path):
     """
@@ -42,25 +43,26 @@ def load_raw_data(df, sampling_rate, base_path):
         
     signals = np.array([signal for signal, meta in data])
     print(f"Finished loading {len(filenames)} raw ECG signals.")
+    print("Shape before saving:", signals.shape)
     return signals
 
 
 def aggregate_diagnostic(y_dic, agg_df):
     """
     Aggregate diagnostic classes using scp_statements.csv mapping.
-    
+
     Parameters:
         y_dic (dict): Dictionary of SCP codes and likelihoods for a record.
         agg_df (pd.DataFrame): Aggregation DataFrame with diagnostic mappings.
-    
+
     Returns:
-        list: List of diagnostic superclasses for the record.
+        str: A single diagnostic superclass for the record.
     """
     diagnostics = []
     for key in y_dic.keys():
         if key in agg_df.index:
             diagnostics.append(agg_df.loc[key]['diagnostic_class'])
-    return list(set(diagnostics))
+    return diagnostics[0] if diagnostics else None  # Select the first superclass or None
 
 
 def normalize_signals(signals):
@@ -82,7 +84,7 @@ def normalize_signals(signals):
     return signals_normalized.reshape(num_samples, num_leads, num_timesteps)
 
 
-def remove_baseline_drift(signal, sampling_rate=100, cutoff=0.5):
+def remove_baseline_drift(signal, sampling_rate=100, cutoff=0.1):
     """
     Removes baseline drift using a high-pass Butterworth filter.
     
@@ -100,7 +102,7 @@ def remove_baseline_drift(signal, sampling_rate=100, cutoff=0.5):
     return filtfilt(b, a, signal, axis=0)
 
 
-def remove_static_noise(signal, sampling_rate=100, cutoff=40):
+def remove_static_noise(signal, sampling_rate=100, cutoff=35):
     """
     Removes static noise using a low-pass Butterworth filter.
     
@@ -118,7 +120,7 @@ def remove_static_noise(signal, sampling_rate=100, cutoff=40):
     return filtfilt(b, a, signal, axis=0)
 
 
-def remove_burst_noise(signal, kernel_size=5):
+def remove_burst_noise(signal, kernel_size=3):
     """
     Removes burst noise using median filtering.
     
@@ -208,8 +210,9 @@ if __name__ == "__main__":
     X = load_raw_data(metadata_df, SAMPLING_RATE, BASE_PATH)
 
     # Normalize signals
-    X_normalized = normalize_signals(X)
+    # X_normalized = normalize_signals(X)
     X_preprocessed = reduce_noise(X, metadata_df)
+    print("Shape after preprocessing:", X_preprocessed.shape)
 
     # Split data into train, validation, and test sets based on fold
     TRAIN_FOLDS = range(1, 9)  # Folds 1-8 for training
@@ -231,14 +234,29 @@ if __name__ == "__main__":
     X_test = X_preprocessed[test_mask]
     y_test = metadata_df[test_mask]['diagnostic_superclass']
 
-    # Save preprocessed data
+    # Apply LabelEncoder to the labels
+    le = LabelEncoder()
+    y_train_encoded = le.fit_transform(y_train)
+    y_val_encoded = le.transform(y_val)
+    y_test_encoded = le.transform(y_test)
+
+    # Save the LabelEncoder using joblib
+    encoder_path = '../models/label_encoder.pkl'
+    joblib.dump(le, encoder_path)
+    print("LabelEncoder saved to:", encoder_path)
+
+    # Save preprocessed data in the desired format
     os.makedirs('../data/processed', exist_ok=True)
     print("Saving preprocessed data...")
+
+    # Save X data
     np.save('../data/processed/X_train.npy', X_train)
     np.save('../data/processed/X_val.npy', X_val)
     np.save('../data/processed/X_test.npy', X_test)
-    y_train.to_pickle('../data/processed/y_train.pkl')
-    y_val.to_pickle('../data/processed/y_val.pkl')
-    y_test.to_pickle('../data/processed/y_test.pkl')
 
-    print("Data preprocessing completed. Normalized signals and splits saved.")
+    # Save y data as .npy files (encoded labels)
+    np.save('../data/processed/y_train.npy', y_train_encoded)
+    np.save('../data/processed/y_val.npy', y_val_encoded)
+    np.save('../data/processed/y_test.npy', y_test_encoded)
+
+    print("Preprocessing and saving complete!")

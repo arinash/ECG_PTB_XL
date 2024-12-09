@@ -45,9 +45,17 @@ def upload():
 
     try:
         # Simulate loading and preprocessing data (replace with actual preprocessing)
-        # Here, we'll generate fake probabilities for demonstration purposes
-        prediction = np.random.rand(len(SUPERCLASSES))  # Fake predictions
-        likelihoods = dict(zip(SUPERCLASSES, prediction))
+        # Here, we'll generate fake probabilities that sum up to 1 (100%)
+        random_probs = np.random.rand(len(SUPERCLASSES))  # Fake probabilities (not summing to 1)
+        
+        # Force at least one likelihood above 60% (let's set the NORM class to a high value)
+        random_probs[2] = max(random_probs[2], 0.6)  # Ensure NORM is at least 60%
+
+        # Re-normalize the probabilities so they sum up to 1
+        normalized_probs = random_probs / random_probs.sum()  # Normalize so they sum to 1
+        
+        # Assign normalized probabilities to the respective superclasses
+        likelihoods = dict(zip(SUPERCLASSES, normalized_probs))
 
         # Build response based on likelihood ranges
         response = []
@@ -88,47 +96,3 @@ def upload():
 
 if __name__ == '__main__':
     app.run(debug=True)
-
-
-    # try:
-    #     # Simulate loading and preprocessing data (replace with actual preprocessing)
-    #     # Here, we'll generate fake ECG data as a placeholder
-    #     ecg_data = np.random.rand(5000)  # Fake data representing 5000 samples
-
-    #     # Predict probabilities
-    #     prediction = model.predict_proba([ecg_data])[0]
-    #     likelihoods = dict(zip(SUPERCLASSES, prediction))
-
-    #     # Define recommendations
-    #     recommendations = {
-    #         "NORM": "No abnormalities detected.",
-    #         "MI": "Seek immediate medical attention for possible myocardial infarction.",
-    #         "STTC": "ST/T changes detected. Consider consulting a cardiologist.",
-    #         "CD": "Possible conduction disturbance. Further evaluation recommended.",
-    #         "HYP": "Hypertrophy detected. Regular monitoring advised."
-    #     }
-
-    #     # Define rules for likelihood ranges
-    #     def interpret_likelihood(likelihood):
-    #         if likelihood <= 0.15:
-    #             return "Cannot be excluded."
-    #         elif 0.15 < likelihood <= 0.35:
-    #             return "Suggestion."
-    #         elif 0.35 < likelihood <= 0.80:
-    #             return "Probably the disease."
-    #         else:
-    #             return "Sure diagnosis."
-
-    #     # Build response for each class
-    #     response = {
-    #         "likelihoods": likelihoods,
-    #         "explanation": {
-    #             class_name: f"{interpret_likelihood(likelihood)} {recommendations[class_name]}"
-    #             for class_name, likelihood in likelihoods.items()
-    #         }
-    #     }
-
-    #     return jsonify(response)
-
-    # except Exception as e:
-    #     return jsonify({'error': f"Error processing file: {str(e)}"}), 500
