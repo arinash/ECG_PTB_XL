@@ -18,8 +18,23 @@ if __name__ == '__main__':
     X_test = np.load(os.path.join(DATA_PATH, 'X_test.npy'), allow_pickle=True)
     y_test = np.load(os.path.join(DATA_PATH, 'y_test.npy'), allow_pickle=True)
     print("Data loaded successfully!")
+    
+    metadata_train = pd.read_csv(os.path.join(DATA_PATH, 'metadata_train.csv'), index_col=0)
+    metadata_val = pd.read_csv(os.path.join(DATA_PATH, 'metadata_val.csv'), index_col=0)
+    metadata_test = pd.read_csv(os.path.join(DATA_PATH, 'metadata_test.csv'), index_col=0)
+    print("Metadata loaded successfully!")
+    
+    metadata_features = ['age', 'weight', 'height']
+    metadata_train = metadata_train[metadata_features].fillna(0).values
+    metadata_val = metadata_val[metadata_features].fillna(0).values
+    metadata_test = metadata_test[metadata_features].fillna(0).values
+    # Verify the shape
+    print("Metadata train shape:", metadata_train.shape)
+    print("Metadata val shape:", metadata_val.shape)
+    print("Metadata test shape:", metadata_test.shape)
 
     le = joblib.load(os.path.join(MODEL_PATH, 'label_encoder.pkl'))
+    label_classes = le.classes_
     print("Label encoder loaded successfully!")
     
     y_train = le.fit_transform(y_train)
@@ -40,8 +55,8 @@ if __name__ == '__main__':
 
     # Test the model
     print("Testing the model...")
-    y_test_encoded, y_pred_encoded, y_pred_probs = test_model(model, X_test, y_test, le)
+    y_test_encoded, y_pred_encoded, y_pred_probs = test_model(model, X_test, metadata_test, y_test, le)
 
     # Evaluate model performance
     print("Evaluating model performance...")
-    evaluate_model_performance(y_test_encoded, y_pred_encoded, y_pred_probs, le)
+    evaluate_model_performance(y_test_encoded, y_pred_encoded, y_pred_probs, label_classes)

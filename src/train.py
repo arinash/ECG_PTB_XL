@@ -2,18 +2,23 @@ import matplotlib.pyplot as plt
 from tensorflow.keras.callbacks import EarlyStopping
 
 # Training and evaluation function
-def train_and_evaluate(model, X_train, y_train, X_val, y_val, X_test, y_test, model_save_path, num_epochs=20):
+def train_and_evaluate(
+    model,
+    X_train, y_train, X_val, y_val, X_test, y_test,
+    metadata_train, metadata_val, metadata_test,
+    model_save_path, num_epochs=20):
 
     early_stopping = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
 
     history = model.fit(
-        X_train, y_train,
+        [X_train, metadata_train], y_train,
         epochs=num_epochs,
         batch_size=32,
-        validation_data=(X_val, y_val),
+        validation_data=([X_val, metadata_val], y_val),
         callbacks=[early_stopping]
     )
 
+    # Plot loss and accuracy
     plt.figure(figsize=(12, 6))
     plt.subplot(1, 2, 1)
     plt.plot(history.history['loss'], label='Training Loss')
@@ -30,7 +35,7 @@ def train_and_evaluate(model, X_train, y_train, X_val, y_val, X_test, y_test, mo
     plt.show()
 
     # Evaluate on the test set
-    test_loss, test_acc = model.evaluate(X_test, y_test)
+    test_loss, test_acc = model.evaluate([X_test, metadata_test], y_test)
     print(f"Test loss: {test_loss:.4f}")
     print(f"Test accuracy: {test_acc:.4f}")
 
@@ -40,6 +45,6 @@ def train_and_evaluate(model, X_train, y_train, X_val, y_val, X_test, y_test, mo
     print("Model saved successfully!")
 
     # Make predictions on the test set
-    y_pred = model.predict(X_test)
+    y_pred = model.predict([X_test, metadata_test])
     print("Predictions (likelihoods) for the first 5 test samples:")
     print(y_pred[:5])

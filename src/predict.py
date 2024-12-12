@@ -1,5 +1,4 @@
 import numpy as np
-import random
 from sklearn.metrics import accuracy_score, confusion_matrix, roc_curve, precision_recall_curve, auc
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -20,61 +19,71 @@ def load_saved_model(model_path):
     print(f"Model loaded successfully from '{model_path}'!")
     return model
 
-# Test the model
-def test_model(model, X_test, y_test, le, num_examples=5):
+# Load the trained model
+def test_model(model, X_test, metadata_test, y_test, le, num_examples=5):
     """
     Test a loaded Keras model on test data.
 
     Parameters:
         model: Loaded Keras model.
-        X_test (np.ndarray): Test input data.
+        X_test (np.ndarray): Test signal data.
+        metadata_test (np.ndarray): Test metadata.
         y_test (np.ndarray): True labels for the test data.
         le: Label encoder.
 
     Returns:
-        y_pred (np.ndarray): Predicted labels.
-        y_test_decoded (np.ndarray): Decoded true labels.
+        y_test_encoded, y_pred_encoded, y_pred_probs
     """
-    # Encode the true labels
-    y_test_encoded = le.transform(y_test)
-
     # Predict probabilities and labels
-    y_pred_probs = model.predict(X_test)
+    y_pred_probs = model.predict([X_test, metadata_test])  # Correct input order
     y_pred_encoded = y_pred_probs.argmax(axis=1)
 
     # Decode true and predicted labels for better interpretability
-    y_test_decoded = le.inverse_transform(y_test_encoded)
+    y_test_decoded = le.inverse_transform(y_test)
     y_pred_decoded = le.inverse_transform(y_pred_encoded)
 
     # Calculate test accuracy
-    test_accuracy = accuracy_score(y_test_encoded, y_pred_encoded)
+    test_accuracy = accuracy_score(y_test, y_pred_encoded)
     print(f"Test Accuracy: {test_accuracy:.4f}")
 
-    # Display random predictions
-    print("\nRandom Predictions vs True Labels:")
-    indices = random.sample(range(len(X_test)), min(num_examples, len(X_test)))
-    for idx in indices:
-        print(f"Example {idx + 1}:")
-        print(f"   True Label: {y_test_decoded[idx]}")
-        print(f"   Predicted Label: {y_pred_decoded[idx]}")
-        print(f"   Predicted Probabilities: {y_pred_probs[idx]}")
-        print("-" * 40)
+    return y_test, y_pred_encoded, y_pred_probs
 
-    return y_test_encoded, y_pred_encoded, y_pred_probs
 
 # Evaluate and visualize model performance
-def evaluate_model_performance(y_test_encoded, y_pred_encoded, y_pred_probs, le):
-    """Evaluate and visualize model performance using various metrics."""
-    label_classes = le.classes_
+def evaluate_model_performance(y_test, y_pred_encoded, y_pred_probs, label_classes):
+    """
+    Evaluate and visualize model performance using various metrics.
+
+    Parameters:
+        y_test (np.ndarray): True labels (encoded).
+        y_pred_encoded (np.ndarray): Predicted labels (encoded).
+        y_pred_probs (np.ndarray): Predicted probabilities for each class.
+        label_classes (list): List of class labels.
+    """
+    from sklearn.metrics import classification_report, roc_curve, auc, precision_recall_curve, confusion_matrix, precision_score, recall_score, f1_score
 
     # Confusion Matrix
-    cm = confusion_matrix(y_test_encoded, y_pred_encoded)
+    cm = confusion_matrix(y_test, y_pred_encoded)
     plt.figure(figsize=(10, 7))
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=label_classes, yticklabels=label_classes)
+    sns.heatmap(
+        cm,
+        annot=True,
+        fmt='d',
+        cmap='Blues',
+        xticklabels=label_classes,
+        yticklabels=label_classes
+    )
     plt.title("Confusion Matrix")
     plt.xlabel("Predicted Labels")
     plt.ylabel("True Labels")
     plt.show()
+
+    if not label_classes or not isinstance(label_classes, list):
+      raise ValueError("label_classes must be a non-empty list of class names.")
+
+    print("Classification Metrics:")
+    print(classification_report(y_test, y_pred_encoded, target_names=label_classes))
+
 
     # ROC Curve (One-vs-Rest)
     print("Plotting ROC Curve...")
@@ -82,7 +91,7 @@ def evaluate_model_performance(y_test_encoded, y_pred_encoded, y_pred_probs, le)
     tpr = {}
     roc_auc = {}
     for i, class_label in enumerate(label_classes):
-        y_test_binary = np.array([1 if label == i else 0 for label in y_test_encoded])
+        y_test_binary = (y_test == i).astype(int)
         fpr[class_label], tpr[class_label], _ = roc_curve(y_test_binary, y_pred_probs[:, i])
         roc_auc[class_label] = auc(fpr[class_label], tpr[class_label])
         plt.plot(fpr[class_label], tpr[class_label], label=f'{class_label} (AUC = {roc_auc[class_label]:.2f})')
@@ -98,13 +107,29 @@ def evaluate_model_performance(y_test_encoded, y_pred_encoded, y_pred_probs, le)
     print("Plotting Precision-Recall Curve...")
     precision = {}
     recall = {}
+    pr_auc = {}
     for i, class_label in enumerate(label_classes):
-        y_test_binary = np.array([1 if label == i else 0 for label in y_test_encoded])
+        y_test_binary = (y_test == i).astype(int)
         precision[class_label], recall[class_label], _ = precision_recall_curve(y_test_binary, y_pred_probs[:, i])
-        plt.plot(recall[class_label], precision[class_label], label=class_label)
+        pr_auc[class_label] = auc(recall[class_label], precision[class_label])
+        plt.plot(recall[class_label], precision[class_label], label=f'{class_label} (AUC = {pr_auc[class_label]:.2f})')
 
     plt.title("Precision-Recall Curve")
     plt.xlabel("Recall")
     plt.ylabel("Precision")
     plt.legend()
     plt.show()
+
+    # Print AUC for ROC and PR curves, Precision, Recall, and F1-Score
+    print("Detailed Metrics:")
+    for i, class_label in enumerate(label_classes):
+        precision_value = precision_score(y_test, y_pred_encoded, average=None)[i]
+        recall_value = recall_score(y_test, y_pred_encoded, average=None)[i]
+        f1_value = f1_score(y_test, y_pred_encoded, average=None)[i]
+        print(f"Class: {class_label}")
+        print(f"  Precision: {precision_value:.2f}")
+        print(f"  Recall: {recall_value:.2f}")
+        print(f"  F1-Score: {f1_value:.2f}")
+        print(f"  ROC AUC: {roc_auc[class_label]:.2f}")
+        print(f"  PR AUC: {pr_auc[class_label]:.2f}")
+        print()
